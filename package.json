@@ -1,0 +1,32 @@
+{
+  "name": "core-banking-qa",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "test": "playwright test",
+    "test:ui": "playwright test --project=ui",
+    "test:api": "playwright test --project=api",
+    "test:db": "playwright test --project=db",
+    "report": "playwright show-report"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
+    "dotenv": "^18.0.1",
+    "pg": "^8.23.0",
+    "typescript": "^7.0.2",
+    "zod": "^4.6.5"
+  }
+}
