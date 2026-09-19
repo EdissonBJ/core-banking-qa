@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>core-banking-qa</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="app">
+    <h1>core-banking-qa</h1>
+
+    <section data-testid="login-view" id="login-view">
+      <h2>Iniciar sesión</h2>
+      <form data-testid="login-form" id="login-form">
+        <label for="login-email">Email</label>
+        <input data-testid="login-email" id="login-email" name="email" type="email" required autocomplete="username" />
+
+        <label for="login-password">Contraseña</label>
+        <input data-testid="login-password" id="login-password" name="password" type="password" required autocomplete="current-password" />
+
+        <button data-testid="login-submit" type="submit">Ingresar</button>
+        <p data-testid="login-error" id="login-error" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <section data-testid="dashboard-view" id="dashboard-view" hidden>
+      <div class="dashboard-header">
+        <div>
+          <p>Cuenta <span data-testid="account-number" id="account-number"></span></p>
+          <p class="balance">Saldo: <span data-testid="account-balance" id="account-balance"></span> centavos</p>
+        </div>
+        <button data-testid="logout-button" id="logout-button" type="button">Cerrar sesión</button>
+      </div>
+
+      <h2>Transferir</h2>
+      <form data-testid="transfer-form" id="transfer-form">
+        <label for="transfer-to-account">Cuenta de destino</label>
+        <input data-testid="transfer-to-account" id="transfer-to-account" name="toAccountNumber" type="text" placeholder="ACC-0002" required />
+
+        <label for="transfer-amount-cents">Monto (centavos)</label>
+        <input data-testid="transfer-amount-cents" id="transfer-amount-cents" name="amountCents" type="number" min="1" step="1" required />
+
+        <label for="transfer-description">Descripción (opcional)</label>
+        <input data-testid="transfer-description" id="transfer-description" name="description" type="text" />
+
+        <button data-testid="transfer-submit" type="submit">Transferir</button>
+        <p data-testid="transfer-error" id="transfer-error" role="alert" hidden></p>
+        <p data-testid="transfer-success" id="transfer-success" role="status" hidden></p>
+      </form>
+
+      <h2>Extracto</h2>
+      <table data-testid="statement-table" id="statement-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Contraparte</th>
+            <th>Descripción</th>
+            <th>Monto (centavos)</th>
+          </tr>
+        </thead>
+        <tbody id="statement-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
