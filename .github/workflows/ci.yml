@@ -33,9 +33,9 @@ jobs:
     #     corrida — ni por otro job, ni por internet.
     #   - TEST_USER/TEST_PASSWORD son literalmente el usuario y contraseña
     #     que sut/seed.ts hardcodea en el repo público. JWT_SECRET por
-    #     default es "local_dev_only_not_a_real_secret", nombrado así a
-    #     propósito. Ya están en texto plano en .env.example, en el mismo
-    #     commit que este workflow.
+    #     default es "ci_only_not_a_real_secret", nombrado así a propósito.
+    #     Ya están en texto plano en .env.example, en el mismo commit que
+    #     este workflow.
     #
     # Poner estos valores como GitHub Secrets no agrega protección real —
     # no hay nada detrás que proteger, y el valor "secreto" ya es público en
@@ -64,10 +64,15 @@ jobs:
           --health-retries 10
 
     env:
+      # Credenciales del Postgres efímero del job: no son secretos, el
+      # contenedor nace y muere dentro del runner. Se dejan como defaults
+      # para que el CI corra sin configuración previa, con override por
+      # secrets si algún entorno lo requiere. Los secrets se reservan para
+      # lo que da acceso a un recurso real.
       DATABASE_URL: postgresql://${{ secrets.DB_USER || 'cbq' }}:${{ secrets.DB_PASSWORD || 'cbq_local' }}@localhost:5433/${{ secrets.DB_NAME || 'core_banking' }}
       BASE_URL: http://localhost:3000
       API_URL: http://localhost:3000/api
-      JWT_SECRET: ${{ secrets.JWT_SECRET || 'local_dev_only_not_a_real_secret' }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci_only_not_a_real_secret' }}
       TEST_USER: ${{ secrets.TEST_USER || 'alice@bank.local' }}
       TEST_PASSWORD: ${{ secrets.TEST_PASSWORD || 'Passw0rd!' }}
 

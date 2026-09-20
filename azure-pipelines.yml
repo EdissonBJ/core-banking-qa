@@ -14,11 +14,29 @@ variables:
   # con la misma key en el stage Setup y en cada shard del stage Test.
   PLAYWRIGHT_BROWSERS_PATH: $(Pipeline.Workspace)/.cache/ms-playwright
 
+  # Credenciales del Postgres efímero de este pipeline (nace y muere dentro
+  # del job, nunca alcanzable desde fuera) + el usuario/clave de prueba que
+  # sut/seed.ts hardcodea y que .env.example ya expone en texto plano.
+  # Mismo criterio que en .github/workflows/ci.yml: no son secretos reales,
+  # así que viven como default acá en vez de exigir una variable secreta de
+  # pipeline que nadie configuró. Azure no tiene el operador de fallback de
+  # GitHub Actions (`||`): estos SON los valores del pipeline, no un
+  # fallback — si un entorno real necesita otros, se reemplazan estas
+  # líneas o se linkea un variable group, no hace falta lógica condicional.
+  # Si el día de mañana esto corre contra un Postgres compartido con datos
+  # reales, o un JWT_SECRET que firma tokens fuera de CI, ahí sí son
+  # secretos de verdad (variable group / Key Vault, ver el paso comentado
+  # más abajo).
+  DB_USER: cbq
+  DB_PASSWORD: cbq_local
+  DB_NAME: core_banking
+  JWT_SECRET: ci_only_not_a_real_secret
+  TEST_USER: alice@bank.local
+  TEST_PASSWORD: Passw0rd!
+
 # Contenedor de Postgres como resource del pipeline: se referencia por alias
 # ("postgres") desde el job que lo necesita vía `services:`. Mapeado a 5433
-# para calcar docker-compose.yml / .env.example del repo. DB_USER,
-# DB_PASSWORD y DB_NAME son variables secretas del pipeline (UI de Azure o
-# variable group), nunca literales acá.
+# para calcar docker-compose.yml / .env.example del repo.
 resources:
   containers:
     - container: postgres
