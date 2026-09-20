@@ -16,6 +16,7 @@
     "test:ui": "playwright test --project=ui",
     "test:api": "playwright test --project=api",
     "test:db": "playwright test --project=db",
+    "test:known-bug": "playwright test --project=db-known-bug",
     "report": "playwright show-report"
   },
   "keywords": [],

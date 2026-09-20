@@ -13,20 +13,28 @@ test.describe("BUG-001: self-transfer descuadra el ledger", () => {
   // solo para esta cuenta.
   //
   // Mientras esa fila exista, tests/db/ledger-invariants.spec.ts (que
-  // valida justo ese invariante global) va a fallar — y lo haría de forma
-  // intermitente, no consistente: si esa suite corriera antes de que este
-  // test insertara el asiento roto, pasaría; si corriera después y este
-  // afterAll no limpiara, fallaría siempre a partir de ahí. Ninguna de las
-  // dos cosas tiene que ver con una regresión real, así que:
+  // valida justo ese invariante global) fallaría si corriera en paralelo
+  // con esto. Por eso este spec vive en su propio directorio
+  // (tests/db-known-bug/) mapeado al project "db-known-bug" en
+  // playwright.config.ts, con dependencies: ['db']: Playwright no arranca
+  // ese project hasta que TODO el project "db" — incluido
+  // ledger-invariants.spec.ts — terminó. La serialización que evita la
+  // carrera con el resto de la suite es esa dependencia entre projects, no
+  // algo dentro de este archivo.
   //
-  //   1. mode: 'serial' — nada más de ESTE describe se intercala con la
-  //      reproducción (no evita colisión con OTROS archivos corriendo en
-  //      paralelo en otro worker; fullyParallel no serializa entre
-  //      archivos. Si eso llegara a causar flakiness real, la solución es
-  //      mover este spec a un project propio con dependencies: ['db']).
+  // Dentro de este describe sigue habiendo dos cosas, por motivos propios:
+  //   1. mode: 'serial' — si el día de mañana se agrega otro test acá,
+  //      evita que fullyParallel reparta los tests del archivo en workers
+  //      distintos y dispare beforeAll más de una vez (ver el mismo
+  //      problema documentado en tests/api/transfers.spec.ts). Con un solo
+  //      test hoy es un no-op, pero se deja para no volver a pisar el
+  //      mismo rastrillo si esto crece.
   //   2. afterAll borra exactamente el transfer y los ledger_entries que
-  //      este test generó, devolviendo el invariante global a cero antes de
-  //      que termine la corrida.
+  //      este test generó, devolviendo el invariante global a cero. Esto
+  //      sigue siendo necesario aunque ya no haya carrera con otros
+  //      projects: sin este cleanup, la fila rota quedaría en la base para
+  //      cualquier otra corrida futura que reutilice estos datos sin
+  //      resembrar.
   test.describe.configure({ mode: "serial" });
 
   let accountId: string;

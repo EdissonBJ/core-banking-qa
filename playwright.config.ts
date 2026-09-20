@@ -41,5 +41,16 @@ export default defineConfig({
       testDir: "./tests/db",
       dependencies: ["setup"],
     },
+    {
+      // Separado de "db" a propósito: reproduce BUG-001 (self-transfer, ver
+      // sut/BUGS.md), que rompe a propósito el invariante global de doble
+      // partida mientras corre. dependencies: ['db'] garantiza que este
+      // project arranca recién cuando "db" terminó por completo, así que
+      // nunca coexiste en el tiempo con ledger-invariants.spec.ts. Ver el
+      // comentario en tests/db-known-bug/known-bug.spec.ts.
+      name: "db-known-bug",
+      testDir: "./tests/db-known-bug",
+      dependencies: ["db"],
+    },
   ],
 });
