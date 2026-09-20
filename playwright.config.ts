@@ -9,7 +9,18 @@ export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
-  reporter: [["list"], ["html", { open: "never" }]],
+  // list+html alcanza para local. En CI se agrega:
+  // - blob: formato intermedio por shard, pensado para fusionarse en un
+  //   único playwright-report/ (ver .github/workflows/ci.yml).
+  // - junit: consumido por PublishTestResults@2 en azure-pipelines.yml.
+  reporter: process.env.CI
+    ? [
+        ["list"],
+        ["html", { open: "never" }],
+        ["blob"],
+        ["junit", { outputFile: "test-results/junit.xml" }],
+      ]
+    : [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",

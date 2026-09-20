@@ -1,0 +1,164 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  nodeVersion: "20.x"
+  # Ruta fija (en vez del default ~/.cache/ms-playwright) para poder cachearla
+  # con la misma key en el stage Setup y en cada shard del stage Test.
+  PLAYWRIGHT_BROWSERS_PATH: $(Pipeline.Workspace)/.cache/ms-playwright
+
+# Contenedor de Postgres como resource del pipeline: se referencia por alias
+# ("postgres") desde el job que lo necesita vía `services:`. Mapeado a 5433
+# para calcar docker-compose.yml / .env.example del repo. DB_USER,
+# DB_PASSWORD y DB_NAME son variables secretas del pipeline (UI de Azure o
+# variable group), nunca literales acá.
+resources:
+  containers:
+    - container: postgres
+      image: postgres:16-alpine
+      ports:
+        - 5433:5432
+      env:
+        POSTGRES_USER: $(DB_USER)
+        POSTGRES_PASSWORD: $(DB_PASSWORD)
+        POSTGRES_DB: $(DB_NAME)
+
+stages:
+  - stage: Setup
+    displayName: "Setup"
+    jobs:
+      - job: InstallDependencies
+        displayName: "Instalar dependencias y Chromium"
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: $(nodeVersion)
+            displayName: "Usar Node.js"
+
+          # node_modules y los browsers de Playwright no viajan entre stages
+          # (cada stage puede correr en un agente distinto): se cachean acá
+          # por key de package-lock.json para que el stage Test los recupere
+          # con la misma key en vez de reinstalar todo desde cero.
+          - task: Cache@2
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              path: node_modules
+            displayName: "Cachear node_modules"
+
+          - script: npm ci
+            displayName: "npm ci"
+
+          - task: Cache@2
+            inputs:
+              key: 'playwright-browsers | "$(Agent.OS)" | package-lock.json'
+              path: $(PLAYWRIGHT_BROWSERS_PATH)
+            displayName: "Cachear browsers de Playwright"
+
+          - script: npx playwright install --with-deps chromium
+            displayName: "Instalar Chromium"
+
+          # En un entorno real, las credenciales de test (usuario/clave del
+          # seed, JWT_SECRET, credenciales de Postgres) no vivirían como
+          # variables de pipeline planas: se traerían de un Key Vault en el
+          # momento del job. Ejemplo de cómo se conectaría (comentado: este
+          # pipeline no corre contra Azure de verdad, es demostrativo):
+          #
+          # - task: AzureKeyVault@2
+          #   inputs:
+          #     azureSubscription: 'core-banking-qa-service-connection'
+          #     KeyVaultName: 'core-banking-qa-kv'
+          #     SecretsFilter: 'DB-USER,DB-PASSWORD,DB-NAME,JWT-SECRET,TEST-USER,TEST-PASSWORD'
+          #     RunAsPreJob: true
+          #   displayName: 'Traer secrets de test desde Azure Key Vault'
+          #
+          # RunAsPreJob: true hace que los secrets estén disponibles como
+          # variables ($(DB-USER), etc.) antes de que arranque cualquier otro
+          # step del job, incluida la instalación de dependencias.
+
+  - stage: Test
+    displayName: "Test"
+    dependsOn: Setup
+    jobs:
+      - job: PlaywrightShards
+        displayName: "Playwright"
+        pool:
+          vmImage: ubuntu-latest
+        # Equivalente Azure de --shard=N/M: cada instancia paralela conoce su
+        # posición (System.JobPositionInPhase) y el total (System.TotalJobsInPhase).
+        strategy:
+          parallel: 2
+        services:
+          postgres: postgres
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: $(nodeVersion)
+            displayName: "Usar Node.js"
+
+          - task: Cache@2
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              path: node_modules
+            displayName: "Restaurar node_modules"
+
+          - script: npm ci
+            displayName: "npm ci (no-op si el cache pegó)"
+
+          - task: Cache@2
+            inputs:
+              key: 'playwright-browsers | "$(Agent.OS)" | package-lock.json'
+              path: $(PLAYWRIGHT_BROWSERS_PATH)
+            displayName: "Restaurar browsers de Playwright"
+
+          - script: npx playwright install --with-deps chromium
+            displayName: "Instalar Chromium (no-op si el cache pegó)"
+
+          # El agente Linux hosteado de Microsoft trae postgresql-client
+          # preinstalado. El health check del container ya espera a que
+          # Postgres acepte conexiones, pero esto da una segunda confirmación
+          # explícita con el usuario real antes de correr sut:migrate.
+          - script: |
+              for i in $(seq 1 30); do
+                pg_isready -h localhost -p 5433 -U "$DB_USER" && exit 0
+                echo "esperando a Postgres... intento $i"
+                sleep 2
+              done
+              echo "Postgres no respondió a tiempo" >&2
+              exit 1
+            displayName: "Esperar a que Postgres esté listo"
+            env:
+              DB_USER: $(DB_USER)
+
+          - script: npm test -- --shard=$(System.JobPositionInPhase)/$(System.TotalJobsInPhase)
+            displayName: "Correr Playwright (shard $(System.JobPositionInPhase)/$(System.TotalJobsInPhase))"
+            env:
+              DATABASE_URL: "postgresql://$(DB_USER):$(DB_PASSWORD)@localhost:5433/$(DB_NAME)"
+              BASE_URL: "http://localhost:3000"
+              API_URL: "http://localhost:3000/api"
+              JWT_SECRET: $(JWT_SECRET)
+              TEST_USER: $(TEST_USER)
+              TEST_PASSWORD: $(TEST_PASSWORD)
+
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: "JUnit"
+              testResultsFiles: "test-results/junit.xml"
+              testRunTitle: "Playwright shard $(System.JobPositionInPhase)/$(System.TotalJobsInPhase)"
+            displayName: "Publicar resultados JUnit"
+
+          - task: PublishBuildArtifacts@1
+            condition: succeededOrFailed()
+            inputs:
+              PathtoPublish: "playwright-report"
+              ArtifactName: "playwright-report-$(System.JobPositionInPhase)"
+            displayName: "Publicar reporte HTML"
