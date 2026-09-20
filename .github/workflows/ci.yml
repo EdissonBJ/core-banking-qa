@@ -20,13 +20,41 @@ jobs:
     # Postgres como service container: Docker lo levanta antes que corran los
     # steps y lo tira abajo al terminar el job. Mapeado a 5433 para calcar el
     # docker-compose.yml de desarrollo local (docker-compose.yml, .env.example).
+    #
+    # ${{ secrets.X || 'default' }}: si el repo/org configuró el secret, se
+    # usa ese valor; si no, cae al mismo default de .env.example. Esto NO es
+    # una degradación de seguridad, es reconocer qué es un secreto acá y qué
+    # no lo es:
+    #
+    #   - Este Postgres es un contenedor efímero: Docker lo crea al arrancar
+    #     el job y lo destruye al terminar. No persiste entre corridas, no
+    #     tiene datos reales (los siembra sut/seed.ts con fixtures
+    #     determinísticos) y no es alcanzable desde fuera del runner de esa
+    #     corrida — ni por otro job, ni por internet.
+    #   - TEST_USER/TEST_PASSWORD son literalmente el usuario y contraseña
+    #     que sut/seed.ts hardcodea en el repo público. JWT_SECRET por
+    #     default es "local_dev_only_not_a_real_secret", nombrado así a
+    #     propósito. Ya están en texto plano en .env.example, en el mismo
+    #     commit que este workflow.
+    #
+    # Poner estos valores como GitHub Secrets no agrega protección real —
+    # no hay nada detrás que proteger, y el valor "secreto" ya es público en
+    # el propio repo — solo agrega un paso de configuración manual que, si
+    # se salta (como pasó acá: el CI fallaba por secrets sin configurar),
+    # tira abajo el pipeline por nada. Eso es teatro de seguridad: el ritual
+    # de "secretizar" sin un modelo de amenaza real detrás.
+    #
+    # Si el día de mañana esto corre contra un Postgres compartido/persistente
+    # con datos reales, o contra un JWT_SECRET que además firma tokens fuera
+    # de CI, ahí sí son secretos de verdad y el fallback tiene que desaparecer
+    # (forzar que el secret exista, no cubrirlo con un default).
     services:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: ${{ secrets.DB_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.DB_NAME }}
+          POSTGRES_USER: ${{ secrets.DB_USER || 'cbq' }}
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD || 'cbq_local' }}
+          POSTGRES_DB: ${{ secrets.DB_NAME || 'core_banking' }}
         ports:
           - 5433:5432
         options: >-
@@ -35,16 +63,13 @@ jobs:
           --health-timeout 3s
           --health-retries 10
 
-    # Nada hardcodeado: todo lo sensible sale de secrets del repo/organización.
-    # sut/README.md documenta el mismo contrato de variables para desarrollo
-    # local vía .env.
     env:
-      DATABASE_URL: postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@localhost:5433/${{ secrets.DB_NAME }}
+      DATABASE_URL: postgresql://${{ secrets.DB_USER || 'cbq' }}:${{ secrets.DB_PASSWORD || 'cbq_local' }}@localhost:5433/${{ secrets.DB_NAME || 'core_banking' }}
       BASE_URL: http://localhost:3000
       API_URL: http://localhost:3000/api
-      JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      TEST_USER: ${{ secrets.TEST_USER }}
-      TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || 'local_dev_only_not_a_real_secret' }}
+      TEST_USER: ${{ secrets.TEST_USER || 'alice@bank.local' }}
+      TEST_PASSWORD: ${{ secrets.TEST_PASSWORD || 'Passw0rd!' }}
 
     steps:
       - name: Checkout
