@@ -12,6 +12,7 @@ const VALID_SRC = "TEST-API-TRANSFERS-VALID-SRC";
 const VALID_DST = "TEST-API-TRANSFERS-VALID-DST";
 const INSUFFICIENT_SRC = "TEST-API-TRANSFERS-INSUFFICIENT-SRC";
 const CONCURRENCY_SRC = "TEST-API-TRANSFERS-CONCURRENCY-SRC";
+const ZERO_AMOUNT_SRC = "TEST-API-TRANSFERS-ZERO-AMOUNT-SRC";
 
 const VALID_TRANSFER_AMOUNT_CENTS = 12_345;
 const CONCURRENCY_TRANSFER_AMOUNT_CENTS = 1_000;
@@ -39,6 +40,7 @@ test.describe("API transferencias", () => {
   let validDstId: string;
   let insufficientSrcId: string;
   let concurrencySrcId: string;
+  let zeroAmountSrcId: string;
   let sharedDstId: string;
 
   test.beforeAll(async () => {
@@ -65,6 +67,11 @@ test.describe("API transferencias", () => {
       ownerUserId,
       accountNumber: CONCURRENCY_SRC,
       openingBalanceCents: CONCURRENCY_AFFORDABLE_COUNT * CONCURRENCY_TRANSFER_AMOUNT_CENTS,
+    });
+    zeroAmountSrcId = await createFundedTestAccount(client, {
+      ownerUserId,
+      accountNumber: ZERO_AMOUNT_SRC,
+      openingBalanceCents: 10_000,
     });
     sharedDstId = await getAccountIdByNumber(client, "ACC-0002");
 
@@ -108,6 +115,43 @@ test.describe("API transferencias", () => {
 
     const after = await getAccountBalanceCents(dbClient, insufficientSrcId);
     expect(after - before).toBe(0);
+  });
+
+  // Capa: API+DB, no UI. La UI ya bloquea amount=0 client-side (min="1" en
+  // sut/public/index.html, verificado a mano en el navegador: el submit ni
+  // sale, foco vuelve al campo, cero requests) — un test de UI acá solo
+  // probaría el atributo HTML nativo del browser, no la regla de negocio.
+  // La regla real vive en el schema zod de POST /api/transfers
+  // (amountCents: z.number().int().positive()), así que el punto de entrada
+  // correcto es la API, con una verificación en DB de que no se generó
+  // ningún asiento — la capa más barata que puede probar las dos partes del
+  // requisito (se rechaza + no hay side effect).
+  test("transferencia con monto cero devuelve 400 INVALID_BODY y no genera ningún asiento contable", async ({
+    apiClient,
+    dbClient,
+  }) => {
+    const entriesBefore = await dbClient.query("SELECT COUNT(*) AS count FROM ledger_entries WHERE account_id = $1", [
+      zeroAmountSrcId,
+    ]);
+
+    const response = await apiClient.post("/api/transfers", {
+      data: { fromAccountId: zeroAmountSrcId, toAccountId: sharedDstId, amountCents: 0 },
+    });
+
+    expect(response.status()).toBe(400);
+    const body = errorResponseSchema.parse(await response.json());
+    expect(body.code).toBe("INVALID_BODY");
+
+    const entriesAfter = await dbClient.query("SELECT COUNT(*) AS count FROM ledger_entries WHERE account_id = $1", [
+      zeroAmountSrcId,
+    ]);
+    expect(Number(entriesAfter.rows[0].count) - Number(entriesBefore.rows[0].count)).toBe(0);
+
+    const { rows: transferRows } = await dbClient.query(
+      "SELECT COUNT(*) AS count FROM transfers WHERE from_account_id = $1",
+      [zeroAmountSrcId]
+    );
+    expect(Number(transferRows[0].count)).toBe(0);
   });
 
   test("10 transferencias concurrentes desde la misma cuenta: el delta y el conteo en DB coinciden con las respuestas 201", async ({
