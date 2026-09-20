@@ -67,5 +67,31 @@ export default defineConfig({
       testDir: "./tests/db-known-bug",
       dependencies: ["db"],
     },
+    {
+      // No forma parte de "ui"/"api"/"db-known-bug" en npm test a
+      // propósito: package.json enumera los projects de npm test
+      // explícitamente sin nombrar "evals" ni "evals-setup", así que
+      // corren solo cuando se piden por nombre (npm run test:evals).
+      // retries: 0 fijo (sin importar CI) porque cada retry acá es una
+      // llamada real a un LLM, no gratis ni instantánea — no tiene sentido
+      // duplicar costo reintentando algo que ya es tolerante a variación
+      // por diseño (ver el umbral agregado de tests/evals/judge.spec.ts).
+      name: "evals-setup",
+      testDir: "./tests/evals-setup",
+      testMatch: /.*\.setup\.ts/,
+      dependencies: ["setup"],
+      retries: 0,
+    },
+    {
+      name: "evals",
+      testDir: "./tests/evals",
+      dependencies: ["evals-setup"],
+      retries: 0,
+      // 12 casos de golden.json, cada uno con una llamada al agente + una
+      // al juez, más guardrails/prompt-injection: son muchas llamadas
+      // secuenciales a un LLM real, el timeout por test default (30s) no
+      // alcanza.
+      timeout: 5 * 60_000,
+    },
   ],
 });

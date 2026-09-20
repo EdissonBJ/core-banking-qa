@@ -12,11 +12,12 @@
     "sut:dev": "tsx sut/server.ts",
     "sut:migrate": "tsx sut/migrate.ts",
     "sut:seed": "tsx sut/seed.ts",
-    "test": "playwright test",
+    "test": "playwright test --project=ui --project=api --project=db --project=db-known-bug",
     "test:ui": "playwright test --project=ui",
     "test:api": "playwright test --project=api",
     "test:db": "playwright test --project=db",
     "test:known-bug": "playwright test --project=db-known-bug",
+    "test:evals": "playwright test --project=evals",
     "report": "playwright show-report",
     "triage": "tsx src/agents/triage.ts"
   },
