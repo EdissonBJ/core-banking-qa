@@ -23,6 +23,10 @@ export const test = base.extend<Fixtures>({
     const loginPage = new LoginPage(page);
     await loginPage.goto();
     await loginPage.login(TEST_USER, TEST_PASSWORD);
+    // login() no espera ningún resultado (la usan también los tests que
+    // esperan que falle), así que acá es donde confirmamos que este login
+    // en particular terminó bien antes de entregarle la página al test.
+    await page.getByTestId("dashboard-view").waitFor({ state: "visible" });
     await use(page);
   },
 
