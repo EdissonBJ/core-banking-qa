@@ -79,11 +79,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # fetch-depth: 1 (el default) deja un checkout superficial sin
+          # HEAD~1, y src/agents/triage.ts necesita diffear HEAD~1..HEAD
+          # para el step de Triage de más abajo.
+          fetch-depth: 2
 
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -105,6 +110,27 @@ jobs:
       # shards.
       - name: Run Playwright tests
         run: npm test -- --shard=${{ matrix.shard }}/2
+
+      # src/agents/triage.ts SOLO clasifica y reporta (no toca tests ni
+      # código — ver el comentario al inicio de ese archivo para el porqué).
+      # if: failure() hace que esto ni se instale cuando la suite pasó.
+      #
+      # ANTHROPIC_API_KEY sí es un secret de verdad, a diferencia de las
+      # credenciales de Postgres de arriba: da acceso a una API externa
+      # facturable, no a un contenedor efímero sin nada de valor adentro. No
+      # tiene default: si no está configurado, este step falla solo (y
+      # continue-on-error hace que esa falla no tape el motivo real por el
+      # que el job ya estaba en rojo).
+      - name: Install Claude Code CLI
+        if: failure()
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Triage de fallas
+        if: failure()
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run triage
 
       - name: Upload HTML report
         if: always()

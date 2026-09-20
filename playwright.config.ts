@@ -13,12 +13,16 @@ export default defineConfig({
   // - blob: formato intermedio por shard, pensado para fusionarse en un
   //   único playwright-report/ (ver .github/workflows/ci.yml).
   // - junit: consumido por PublishTestResults@2 en azure-pipelines.yml.
+  // - json: lo lee src/agents/triage.ts cuando la suite falla, para armar
+  //   el prompt de clasificación por test (ver el step "Triage" en
+  //   .github/workflows/ci.yml).
   reporter: process.env.CI
     ? [
         ["list"],
         ["html", { open: "never" }],
         ["blob"],
         ["junit", { outputFile: "test-results/junit.xml" }],
+        ["json", { outputFile: "test-results/results.json" }],
       ]
     : [["list"], ["html", { open: "never" }]],
   use: {
